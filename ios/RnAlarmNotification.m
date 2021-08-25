@@ -11,6 +11,8 @@
 
 static NSString *const kLocalNotificationReceived = @"LocalNotificationReceived";
 static NSString *const kLocalNotificationDismissed = @"LocalNotificationDismissed";
+static NSString *const kLocalNotificationSnooze = @"LocalNotificationSnooze";
+static NSString *const kLocalNotificationStandup = @"LocalNotificationStandup";
 
 static AVAudioPlayer *player;
 static id _sharedInstance = nil;
@@ -157,8 +159,28 @@ API_AVAILABLE(ios(10.0)) {
     NSLog(@"show notification");
     [[UIApplication sharedApplication] setIdleTimerDisabled:NO];
     if ([response.notification.request.content.categoryIdentifier isEqualToString:@"CUSTOM_ACTIONS"]) {
-       if ([response.actionIdentifier isEqualToString:@"SNOOZE_ACTION"]) {
-           [RnAlarmNotification snoozeAlarm:response.notification];
+        if ([response.actionIdentifier isEqualToString:@"SNOOZE_ACTION"]) {
+//            [RnAlarmNotification snoozeAlarm:response.notification];
+            
+            NSLog(@"do snooze");
+            [RnAlarmNotification stopSound];
+            
+            NSMutableDictionary *notification = [NSMutableDictionary dictionary];
+            notification[@"id"] = response.notification.request.identifier;
+            
+            [[NSNotificationCenter defaultCenter] postNotificationName:kLocalNotificationSnooze
+                                                                object:self
+                                                              userInfo:notification];
+        } else if ([response.actionIdentifier isEqualToString:@"STANDUP_ACTION"]) {
+            NSLog(@"do standup");
+            [RnAlarmNotification stopSound];
+            
+            NSMutableDictionary *notification = [NSMutableDictionary dictionary];
+            notification[@"id"] = response.notification.request.identifier;
+            
+            [[NSNotificationCenter defaultCenter] postNotificationName:kLocalNotificationStandup
+                                                                object:self
+                                                              userInfo:notification];
        } else if ([response.actionIdentifier isEqualToString:@"DISMISS_ACTION"]) {
            NSLog(@"do dismiss");
            [RnAlarmNotification stopSound];
@@ -188,10 +210,20 @@ API_AVAILABLE(ios(10.0)) {
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleLocalNotificationDismissed:) name:kLocalNotificationDismissed
                                                object:nil];
+    
+    // snooze notification
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleLocalNotificationSnooze:) name:kLocalNotificationDismissed
+                                               object:nil];
+    
+    // standup notification
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleLocalNotificationStandUp:) name:kLocalNotificationStandup
+                                               object:nil];
 }
 
 - (NSArray<NSString *> *)supportedEvents {
-    return @[@"OnNotificationOpened", @"OnNotificationDismissed"];
+    return @[@"OnNotificationOpened", @"OnNotificationDismissed", @"OnNotificationSnooze", @"OnNotificationStandUp"];
 }
 
 - (void)handleLocalNotificationReceived:(NSNotification *)notification {
@@ -202,6 +234,16 @@ API_AVAILABLE(ios(10.0)) {
 - (void)handleLocalNotificationDismissed:(NSNotification *)notification {
     // send to js
     [self sendEventWithName:@"OnNotificationDismissed" body: stringify(notification.userInfo)];
+}
+
+- (void)handleLocalNotificationSnooze:(NSNotification *)notification {
+    // send to js
+    [self sendEventWithName:@"OnNotificationSnooze" body: stringify(notification.userInfo)];
+}
+
+- (void)handleLocalNotificationStandUp:(NSNotification *)notification {
+    // send to js
+    [self sendEventWithName:@"OnNotificationStandUp" body: stringify(notification.userInfo)];
 }
 
 - (void)stopObserving {
@@ -481,26 +523,34 @@ API_AVAILABLE(ios(10.0)) {
 RCT_EXPORT_METHOD(scheduleAlarm: (NSDictionary *)details resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject){
     @try {
         if (@available(iOS 10.0, *)) {
-            UNMutableNotificationContent* content = [[UNMutableNotificationContent alloc] init];
             
+            printf("ios schedule alarm\n");
+            UNMutableNotificationContent* content = [[UNMutableNotificationContent alloc] init];
+            printf("allocated UNMutableNotificationContent\n");
             content.title = [NSString localizedUserNotificationStringForKey:details[@"title"] arguments:nil];
             content.body = [NSString localizedUserNotificationStringForKey:details[@"message"] arguments:nil];
-            
+            printf("fetched title and message/body\n");
+            printf("setting buttons if any\n");
             // set buttons
             if([details[@"has_button"] isEqualToNumber: [NSNumber numberWithInt: 1]]){
                 content.categoryIdentifier = @"CUSTOM_ACTIONS";
             }
             
             // set alarm date
+            printf("setting alarm date\n");
             NSDateComponents *fireDate = parseDate(details[@"fire_date"]);
             
+            printf("creating trigger\n");
             UNCalendarNotificationTrigger* trigger = [UNCalendarNotificationTrigger triggerWithDateMatchingComponents:fireDate repeats:NO];
             
             // alarm id
+            printf("creating alarm id\n");
             NSString *alarmId = [NSString stringWithFormat: @"%ld", (long) NSDate.date.timeIntervalSince1970];
             
+            printf("setting alarm volume\n");
             NSString *volume = [details[@"volume"] stringValue];
             
+            printf("fetching alarm config\n");
             content.userInfo = @{
                 @"alarmId": alarmId,
                 @"sound": details[@"play_sound"],
@@ -517,6 +567,7 @@ RCT_EXPORT_METHOD(scheduleAlarm: (NSDictionary *)details resolver:(RCTPromiseRes
                 @"snooze_interval": details[@"snooze_interval"]
             };
             
+            printf("resolving sound file\n");
             if([details[@"play_sound"] isEqualToNumber: [NSNumber numberWithInt: 1]]) {
                 BOOL notEmpty = [RnAlarmNotification checkStringIsNotEmpty:details[@"sound_name"]];
                 if(notEmpty != YES){
@@ -527,10 +578,12 @@ RCT_EXPORT_METHOD(scheduleAlarm: (NSDictionary *)details resolver:(RCTPromiseRes
             }
             
             // Create the request object.
+            printf("creating request object\n");
             UNNotificationRequest* request = [UNNotificationRequest requestWithIdentifier:alarmId content:content trigger:trigger];
-            
+            printf("fetching currentNotificationCenter\n");
             UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
             
+            printf("addNotificationRequest\n");
             [center addNotificationRequest:request withCompletionHandler:^(NSError * _Nullable error) {
                 if (error != nil) {
                     NSLog(@"error: %@", error.localizedDescription);
@@ -538,8 +591,10 @@ RCT_EXPORT_METHOD(scheduleAlarm: (NSDictionary *)details resolver:(RCTPromiseRes
                 }
             }];
             
+            printf("creating NSDictionary for alarm\n");
             NSDictionary *alarm = [NSDictionary dictionaryWithObjectsAndKeys: alarmId, @"id", nil];
             
+            printf("resolve alarm\n");
             resolve(alarm);
         } else {
             // Fallback on earlier versions
@@ -609,11 +664,12 @@ RCT_EXPORT_METHOD(sendNotification: (NSDictionary *)details) {
     }
 }
 
-RCT_EXPORT_METHOD(deleteAlarm: (NSInteger *)id){
-    NSLog(@"delete alarm: %li", (long) id);
+RCT_EXPORT_METHOD(deleteAlarm: (NSString *)id){
+    NSLog(@"delete alarm: %li", id);
+    long id_num = [id longLongValue];
     if (@available(iOS 10.0, *)) {
         UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
-        NSArray *array = [NSArray arrayWithObjects:[NSString stringWithFormat:@"%li", (long)id], nil];
+        NSArray *array = [NSArray arrayWithObjects:[NSString stringWithFormat:@"%li", (long)id_num], nil];
         [center removePendingNotificationRequestsWithIdentifiers:array];
     } else {
         // Fallback on earlier versions
@@ -728,19 +784,24 @@ RCT_EXPORT_METHOD(requestPermissions:(NSDictionary *)permissions
             intentIdentifiers:@[]
             options:UNNotificationCategoryOptionCustomDismissAction];
         
-        UNNotificationAction* snoozeAction = [UNNotificationAction
-              actionWithIdentifier:@"SNOOZE_ACTION"
-              title:@"SNOOZE"
-              options:UNNotificationActionOptionNone];
+//        UNNotificationAction* snoozeAction = [UNNotificationAction
+//              actionWithIdentifier:@"SNOOZE_ACTION"
+//              title:@"SNOOZE"
+//              options:UNNotificationActionOptionNone];
          
         UNNotificationAction* stopAction = [UNNotificationAction
               actionWithIdentifier:@"DISMISS_ACTION"
-              title:@"DISMISS"
+              title:@"Session beenden"
+              options:UNNotificationActionOptionNone];
+        
+        UNNotificationAction* standUpAction = [UNNotificationAction
+              actionWithIdentifier:@"STANDUP_ACTION"
+              title:@"Aufstehen"
               options:UNNotificationActionOptionForeground];
         
         UNNotificationCategory* customCategory = [UNNotificationCategory
             categoryWithIdentifier:@"CUSTOM_ACTIONS"
-            actions:@[snoozeAction, stopAction]
+            actions:@[stopAction, standUpAction]
             intentIdentifiers:@[]
             options:UNNotificationCategoryOptionNone];
         
