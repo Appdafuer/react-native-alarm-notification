@@ -56,10 +56,14 @@ public class AlarmReceiver extends BroadcastReceiver {
 
                         try {
                             alarm = alarmDB.getAlarm(id);
-                            alarmUtil.snoozeAlarm(alarm);
+                            //alarmUtil.snoozeAlarm(alarm);
                             Log.e(TAG, "alarm snoozed: " + alarm.toString());
 
+                            ANModule.getReactAppContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("OnNotificationSnooze", "{\"id\": \"" + alarm.getId() + "\"}");
+
                             alarmUtil.removeFiredNotification(alarm.getId());
+
+                            alarmUtil.cancelAlarm(alarm, true);
                         } catch (Exception e) {
                             alarmUtil.stopAlarmSound();
                             e.printStackTrace();
@@ -78,7 +82,28 @@ public class AlarmReceiver extends BroadcastReceiver {
 
                             alarmUtil.removeFiredNotification(alarm.getId());
                             
-                            alarmUtil.cancelAlarm(alarm, false);
+                            alarmUtil.cancelAlarm(alarm, true);
+                        } catch (Exception e) {
+                            alarmUtil.stopAlarmSound();
+                            e.printStackTrace();
+                        }
+                        break;
+                    case Constants.NOTIFICATION_ACTION_STAND_UP:
+                        id = intent.getExtras().getInt("StandUpAlarmId");
+
+                        try {
+                            alarm = alarmDB.getAlarm(id);
+                            Log.e(TAG, "alarm stand up: " + alarm.toString());
+
+                            String alarmData = "{\"id\": \"" + alarm.getId() + "\","
+                                    + "\"action\": \"" + "stand_up" + "\"}";
+
+                            // emit notification dismissed
+                            ANModule.getReactAppContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("OnNotificationStandUp", alarmData);
+
+                            alarmUtil.removeFiredNotification(alarm.getId());
+                            
+                            alarmUtil.cancelAlarm(alarm, true);
                         } catch (Exception e) {
                             alarmUtil.stopAlarmSound();
                             e.printStackTrace();

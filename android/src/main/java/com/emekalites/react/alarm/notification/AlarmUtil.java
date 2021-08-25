@@ -15,6 +15,8 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,6 +25,7 @@ import android.os.Vibrator;
 import android.util.Log;
 import android.widget.Toast;
 
+import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
 
 import com.facebook.react.bridge.WritableMap;
@@ -31,6 +34,7 @@ import com.facebook.react.bridge.WritableNativeMap;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
@@ -39,6 +43,7 @@ import java.util.Iterator;
 import static com.emekalites.react.alarm.notification.Constants.ADD_INTENT;
 import static com.emekalites.react.alarm.notification.Constants.NOTIFICATION_ACTION_DISMISS;
 import static com.emekalites.react.alarm.notification.Constants.NOTIFICATION_ACTION_SNOOZE;
+import static com.emekalites.react.alarm.notification.Constants.NOTIFICATION_ACTION_STAND_UP;
 
 class AlarmUtil {
     private static final String TAG = AlarmUtil.class.getSimpleName();
@@ -127,6 +132,7 @@ class AlarmUtil {
         }
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     void setAlarm(AlarmModel alarm) {
         Calendar calendar = getCalendarFromAlarm(alarm);
 
@@ -144,13 +150,14 @@ class AlarmUtil {
         String scheduleType = alarm.getScheduleType();
 
         if (scheduleType.equals("once")) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), alarmIntent);
+            /*if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), alarmIntent);
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                 alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), alarmIntent);
             } else {
                 alarmManager.set(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), alarmIntent);
-            }
+            }*/
         } else if (scheduleType.equals("repeat")) {
             long interval = this.getInterval(alarm.getInterval(), alarm.getIntervalValue());
 
@@ -426,15 +433,15 @@ class AlarmUtil {
                     mChannel.setBypassDnd(alarm.isBypassDnd());
                 }
 
-                mChannel.setVibrationPattern(null);
+                mChannel.setVibrationPattern(alarm.isVibrate() ? vibrationPattern : null);
 
-                // play vibration
-                if (alarm.isVibrate()) {
-                    Vibrator vibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
-                    if (vibrator.hasVibrator()) {
-                        vibrator.vibrate(VibrationEffect.createWaveform(vibrationPattern, 0));
-                    }
-                }
+//                // play vibration
+//                if (alarm.isVibrate()) {
+//                    Vibrator vibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
+//                    if (vibrator.hasVibrator()) {
+//                        vibrator.vibrate(VibrationEffect.createWaveform(mVibratePattern, 0));
+//                    }
+//                }
 
                 mNotificationManager.createNotificationChannel(mChannel);
                 mBuilder.setChannelId(channelID);
@@ -454,19 +461,26 @@ class AlarmUtil {
             mBuilder.setContentIntent(pendingIntent);
 
             if (alarm.isHasButton()) {
+                Intent standUpIntent = new Intent(mContext, AlarmReceiver.class);
+                standUpIntent.setAction(NOTIFICATION_ACTION_STAND_UP);
+                standUpIntent.putExtra("StandUpAlarmId", alarm.getId());
+                PendingIntent pendingStandUp = PendingIntent.getBroadcast(mContext, notificationID, standUpIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+                NotificationCompat.Action standUpAction = new NotificationCompat.Action(android.R.drawable.ic_lock_idle_alarm, "Aufstehen", pendingStandUp);
+                mBuilder.addAction(standUpAction);
+
                 Intent dismissIntent = new Intent(mContext, AlarmReceiver.class);
                 dismissIntent.setAction(NOTIFICATION_ACTION_DISMISS);
                 dismissIntent.putExtra("AlarmId", alarm.getId());
                 PendingIntent pendingDismiss = PendingIntent.getBroadcast(mContext, notificationID, dismissIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-                NotificationCompat.Action dismissAction = new NotificationCompat.Action(android.R.drawable.ic_lock_idle_alarm, "DISMISS", pendingDismiss);
+                NotificationCompat.Action dismissAction = new NotificationCompat.Action(android.R.drawable.ic_lock_idle_alarm, "Session beenden", pendingDismiss);
                 mBuilder.addAction(dismissAction);
 
-                Intent snoozeIntent = new Intent(mContext, AlarmReceiver.class);
-                snoozeIntent.setAction(NOTIFICATION_ACTION_SNOOZE);
-                snoozeIntent.putExtra("SnoozeAlarmId", alarm.getId());
-                PendingIntent pendingSnooze = PendingIntent.getBroadcast(mContext, notificationID, snoozeIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-                NotificationCompat.Action snoozeAction = new NotificationCompat.Action(R.drawable.ic_snooze, "SNOOZE", pendingSnooze);
-                mBuilder.addAction(snoozeAction);
+//                Intent snoozeIntent = new Intent(mContext, AlarmReceiver.class);
+//                snoozeIntent.setAction(NOTIFICATION_ACTION_SNOOZE);
+//                snoozeIntent.putExtra("SnoozeAlarmId", alarm.getId());
+//                PendingIntent pendingSnooze = PendingIntent.getBroadcast(mContext, notificationID, snoozeIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+//                NotificationCompat.Action snoozeAction = new NotificationCompat.Action(R.drawable.ic_snooze, "Snooze", pendingSnooze);
+//                mBuilder.addAction(snoozeAction);
             }
 
             //use big text
