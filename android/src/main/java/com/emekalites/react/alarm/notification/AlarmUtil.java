@@ -484,7 +484,7 @@ class AlarmUtil {
             }
 
             //large icon
-            int largeIconResId = R.mipmap.ic_launcher_foreground;
+            int largeIconResId = R.drawable.ic_notification_large;
             Bitmap largeIconBitmap = BitmapFactory.decodeResource(res, largeIconResId);
             if (largeIconResId != 0) {
                 mBuilder.setLargeIcon(largeIconBitmap);
