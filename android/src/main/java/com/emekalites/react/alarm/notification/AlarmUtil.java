@@ -379,14 +379,9 @@ class AlarmUtil {
             Resources res = mContext.getResources();
             String packageName = mContext.getPackageName();
 
-            //icon
-            int smallIconResId;
-            String smallIcon = alarm.getSmallIcon();
-            if (smallIcon != null && !smallIcon.equals("")) {
-                smallIconResId = res.getIdentifier(smallIcon, "mipmap", packageName);
-            } else {
-                smallIconResId = res.getIdentifier("ic_launcher", "mipmap", packageName);
-            }
+           //icon
+            int smallIconResId = R.drawable.ic_notification_small;
+            
 
             Intent intent = new Intent(mContext, intentClass);
             intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -489,13 +484,10 @@ class AlarmUtil {
             }
 
             //large icon
-            String largeIcon = alarm.getLargeIcon();
-            if (largeIcon != null && !largeIcon.equals("") && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                int largeIconResId = res.getIdentifier(largeIcon, "mipmap", packageName);
-                Bitmap largeIconBitmap = BitmapFactory.decodeResource(res, largeIconResId);
-                if (largeIconResId != 0) {
-                    mBuilder.setLargeIcon(largeIconBitmap);
-                }
+            int largeIconResId = R.mipmap.ic_launcher_foreground;
+            Bitmap largeIconBitmap = BitmapFactory.decodeResource(res, largeIconResId);
+            if (largeIconResId != 0) {
+                mBuilder.setLargeIcon(largeIconBitmap);
             }
 
             // set tag and push notification
